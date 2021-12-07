@@ -1,0 +1,102 @@
+## ---------------------------
+##
+## Script name: TCGA Correlation Analysis.R
+##
+## Purpose of script: Plots correlation analysis results from TCGA 2021 Pan Cancer
+##
+## Author: Abhi Jaiswal
+##
+## Date Created: 2021-08-23
+##
+## Email: ajaiswal1995@gmail.com
+##
+## ---------------------------
+##
+## Notes:
+##   
+##
+## ---------------------------
+##
+## Packages:
+
+library(ggplot2)
+library(cowplot)
+library(readr)
+library(corrplot)
+library(readxl)
+library(GSVA)
+
+
+####################################################################################################################################  
+## TCGA Correlation Analysis
+
+load("TCGA_PanCancer_2021_TCellExcGSVAResults_v3.rda")
+
+SampleMetadata = read_delim("gdc_sample_sheet.2021-08-19.tsv","\t", escape_double = FALSE, trim_ws = TRUE)
+SampleMetadata = subset(SampleMetadata,select = c("Sample ID","Sample Type","Project ID"))
+
+# TCGAAccessions = read.xlsx("TCGA Accessions.xlsx")
+# TCGAAccessions$Study.Abbreviation = paste0("TCGA-",TCGAAccessions$Study.Abbreviation)
+
+# SampleMetadata = merge(SampleMetadata,TCGAAccessions,by.x = 3,by.y = 1)[,-1]
+
+PanCan_GSVA = merge(SampleMetadata,t(GSVAResults),by.x = 1,by.y = 0)
+PanCan_GSVA = subset(PanCan_GSVA,`Sample Type` != "Solid Tissue Normal")
+
+ExcSignatures = colnames(PanCan_GSVA)[c(10,8,6,4,24,26)]
+
+MetastaticMelanoma = subset(PanCan_GSVA,`Project ID` == "TCGA-SKCM" & `Sample Type` == "Metastatic")
+MetastaticMelanoma = MetastaticMelanoma[ExcSignatures]
+colnames(MetastaticMelanoma) = c("TRM","Exh","Act","Mem","227_Up","IFNG")
+MetastaticMelanoma = cor(MetastaticMelanoma,method = "pearson")
+MetastaticMelanoma = corrplot(MetastaticMelanoma,addCoef.col="black")
+
+PrimaryMelanoma = subset(PanCan_GSVA,`Project ID` == "TCGA-SKCM" & `Sample Type` == "Primary Tumor")
+PrimaryMelanoma = PrimaryMelanoma[ExcSignatures]
+colnames(PrimaryMelanoma) = c("TRM","Exh","Act","Mem","227_Up","IFNG")
+PrimaryMelanoma = cor(PrimaryMelanoma,method = "pearson")
+PrimaryMelanoma = corrplot(PrimaryMelanoma,addCoef.col="black")
+
+
+PanCancer = subset(PanCan_GSVA,`Sample Type` == "Primary Tumor")
+# PanCancer = PanCan_GSVA
+PanCancer = PanCancer[ExcSignatures]
+colnames(PanCancer) = c("TRM","Exh","Act","Mem","227_Up","IFNG")
+PanCancer = cor(PanCancer,method = "pearson")
+PanCancer = corrplot(PanCancer,addCoef.col="black")
+
+####################################################################################################################################  
+## Validation Set Correlation Analysis
+
+#############################################################
+## Imports FPKM File
+TPM <- data.frame(read_delim("../../aPD1_Melanoma_TPM.txt", "\t",escape_double = FALSE, trim_ws = TRUE))
+rownames(TPM) = TPM$X1; TPM = TPM[,-1];TPM = data.matrix(TPM)
+FPKM_GSVA = t(TPM)
+
+#############################################################
+## GSVA and correlation analysis of FPKM Files
+
+load("GSVASignaturesforScoring_v3.rda")
+
+Validation_GSVA = gsva(FPKM_GSVA,SigsforScoring,method="ssgsea")
+Validation_GSVA = Validation_GSVA[ExcSignatures,]
+rownames(Validation_GSVA) = c("TRM","Exh","Act","Mem","227_Up","IFNG")
+Validation_GSVA = cor(t(Validation_GSVA),method = "spearman")
+Validation_GSVA = corrplot(Validation_GSVA,addCoef.col="black")
+
+Scale = 2
+
+pdf("7C_CorrelationAnalysisResults_DCSignatures.pdf",width = 7*Scale,height = 6*Scale)
+par(mfrow=c(2,4),mai = c(0,0,0,0))
+corrplot(MetastaticMelanoma)
+corrplot(PrimaryMelanoma)
+corrplot(PanCancer)
+corrplot(Validation_GSVA)
+corrplot(MetastaticMelanoma,addCoef.col="black")
+corrplot(PrimaryMelanoma,addCoef.col="black")
+corrplot(PanCancer,addCoef.col="black")
+corrplot(Validation_GSVA,addCoef.col="black")
+dev.off()
+
+
